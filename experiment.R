@@ -61,19 +61,21 @@ for (i in seq_len(nrow(prophetGrid))) {
     m <- prophet(train, growth = parameters$growth, holidays = holidays,
                  seasonality.prior.scale = parameters$seasonality_prior_scale, 
                  changepoint.prior.scale = parameters$changepoint_prior_scale,
-                 holidays.prior.scale = parameters$holidays_prior_scale)
+                 holidays.prior.scale = parameters$holidays_prior_scale,
+                 yearly.seasonality = TRUE,
+                 daily.seasonality = FALSE))
+
     
     future <- make_future_dataframe(m, periods = 184)
     if (parameters$growth == 'logistic') {future$cap <- parameters$capacity}
     
-    # NOTE: There's a problem in function names with library(caret)
     forecast <- predict(m, future)
-    #tail(forecast[c('ds', 'yhat', 'yhat_lower', 'yhat_upper')])
-    #forecast$ds <- as.POSIXct(forecast$ds)
-    #forecast$ds[seq_len(nrow(train))] <- train$datetime
-    #forecast$ds[5423:nrow(forecast)] <- seq(ymd_hms('2011-12-20 01:00:00'), by = 'day', length.out = 364)
-    
-    results[i] <- forecast::accuracy(forecast[forecast$ds %in% valid$ds, 'yhat'], valid$y)[ , 'MAE']
+    forecast$ds <- as.Date(forecast$ds)
+    accuracy_tb <- inner_join(forecast,valid, by='ds') %>% select(ds, yhat, y)
+    forecast$ds <- as.POSIXct(forecast$ds)
+    results[i] <- accuracy(accuracy_tb$yhat, accuracy_tb$y)[,'MAE']
+
+    print(paste("Iteration",i,"/",nrow(prophetGrid)))
 }
 
 prophetGrid <- cbind(prophetGrid, results)
@@ -85,7 +87,9 @@ retrain$cap <- best_params$capacity
 m <- prophet(retrain, growth = best_params$growth, holidays = holidays,
              seasonality.prior.scale = best_params$seasonality_prior_scale,
              changepoint.prior.scale = best_params$changepoint_prior_scale,
-             holidays.prior.scale = best_params$holidays_prior_scale)
+             holidays.prior.scale = best_params$holidays_prior_scale,
+             yearly.seasonality = TRUE,
+             daily.seasonality = FALSE))
 
 future <- make_future_dataframe(m, periods = 184)
 future$cap <- best_params$capacity
